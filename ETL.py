@@ -32,6 +32,24 @@ transcript = pd.read_json('data/transcript.json', orient='records', lines=True)
 
 transcript.rename (columns = {'time': 'time in hours'}, inplace = True)
 
+def interquartile_range (data, cols, x):
+
+    '''
+        In Data Science Interquartile range is defined as the area shown below
+        upper = 75 % + (75 % - 25 %)
+        lower = 25 % - (75 % - 25 %)
+
+        values outside this range are propably false and do influence the analyzes in a wrong direction
+    '''
+
+    for column in cols:
+        upper = data.describe () [column]['75%'] + ((data.describe () [column]['75%'] - data.describe () [column]['25%'])*x)
+        lower = data.describe () [column]['25%'] - ((data.describe () [column]['75%'] - data.describe () [column]['25%'])*x)
+        data = data [data [column] < upper]
+        data = data [data [column] > lower]
+    return data
+
+
 def ETL_portfolio ():
 
     '''
@@ -237,13 +255,19 @@ def ETL_profiles (profile):
     return (profile)
 
 
+'''
+________________________________________________________________________________
+
+'''
+
 portfolio = ETL_portfolio()
 
 print ('ETL Portfolio')
 
-transcript = get_Transcript_values (0, len (transcript))
-transcript = ETL_transcript (transcript)
 
+transcript = get_Transcript_values (0, len (transcript))
+transcript = interquartile_range (transcript, ['amount'], 3)
+transcript = ETL_transcript (transcript)
 transcript = get_visit_data(transcript)
 
 
@@ -254,6 +278,11 @@ received, viewed, completed, transactions = split_on_event (transcript)
 
 profile = ETL_profiles (profile)
 print ('ETL Profiles')
+
+
+'''
+________________________________________________________________________________
+'''
 
 def get_user_interactions (user_id):
     user_int = transcript [transcript ['person'] == user_id]
@@ -336,6 +365,16 @@ def get_offer_response (i):
             transaction Data, that leads into a completed offer is one record above!!
         '''
         index_completed = (comp_matrix.index [0].astype (int) - 1)
+
+        if (transcript.loc [index_completed]['event'] == 'transaction'):
+            index_completed = index_completed
+
+        elif (transcript.loc [index_completed -1 ]['event'] == 'transaction'):
+            index_completed = index_completed -1
+
+        else:
+            index_completed = -1
+
         liste.append (index_completed)
     except: index_completed = index_completed
 
@@ -410,7 +449,7 @@ def get_reaction_matrix (list_of_customers):
 
     while a <  len (list_of_customers):
         '''
-        If you
+        If you want a smaller set of customers
         '''
 
         person = list_of_customers [a]
@@ -449,34 +488,15 @@ def store_df (data, name):
     print (name_in, ' stored')
     return
 
-# drop non-representative persons
 
 
-def interquartile_range (data, cols):
-
-    '''
-        In Data Science Interquartile range is defined as the area shown below
-        upper = 75 % + (75 % - 25 %)
-        lower = 25 % - (75 % - 25 %)
-
-        values outside this range are propably false and do influence the analyzes in a wrong direction
-    '''
-
-    for column in cols:
-        upper = data.describe () [column]['75%'] + (data.describe () [column]['75%'] - data.describe () [column]['25%'])
-        lower = data.describe () [column]['25%'] - (data.describe () [column]['75%'] - data.describe () [column]['25%'])
-        data = data [data [column] < upper]
-        data = data [data [column] > lower]
-    return data
-
-
-### this one takes some time... you can load it later from the db.
+'''
+________________________________________________________________________________
+'''
 
 profile = get_user_transaction_data ()
 print ('ETL offer response Matrix')
 
-
-# attention time consuming
 
 list_of_customers = (list(profile ['id']))
 
@@ -484,11 +504,9 @@ received_reaction_matrix = get_reaction_matrix (list_of_customers)
 received_reaction_matrix
 
 visits_person = transactions.groupby (['person'])['amount'].value_counts().unstack().sum (axis = 1)
-# using interquartile range to drop some customers...
 
-# as columns I use 'age', 'income', 'max (amount spent)'
 
-profiles_in_use = interquartile_range (profile, ['age', 'income', 'max'])
+profiles_in_use = interquartile_range (profile, ['age', 'income', 'max'], 1)
 profiles_in_use
 print ('Profiles are cleaned')
 
